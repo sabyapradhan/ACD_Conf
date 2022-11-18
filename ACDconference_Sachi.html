@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>ACD Conference</title>
+	
+	<script src="https://code.jquery.com/jquery-3.3.1.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
+	<script src="https://sdk-cdn.mypurecloud.com/javascript/latest/purecloud-platform-client-v2.min.js"></script>
+	<script type="text/javascript">
+
+		//
+		// NEED TO UPDATE
+		//
+		const clientId = "3dXXXXXXX-b8e0-XXXXXXXXXXX-99a7d4XXXX"; //Sachi's dev org
+		const redirectUri = 'https://briandemofiles.s3.amazonaws.com/ACDconference_Sachi.html';
+
+		// Set purecloud objects
+		const platformClient = require('platformClient');
+		const client = platformClient.ApiClient.instance;
+		const conversationsApi = new platformClient.ConversationsApi();
+
+		// Local vars
+		const urlParams = new URLSearchParams(window.location.search);
+		const env = urlParams.get('environment');
+		let conversationId = urlParams.get('conversationId');
+
+		// Set PureCloud settings
+		client.setEnvironment(env);
+		client.setPersistSettings(false, 'ACD Conference');
+
+		$(document).ready(() => {
+			// Authenticate with PureCloud
+			client.loginImplicitGrant(clientId, redirectUri, {'state': conversationId})
+			
+				.then((data) => {
+					console.log('Logged in with state: ' + JSON.stringify(data));
+                    conversationId = data.state;
+				})
+				.catch((err) => {
+                    console.error(err);
+                    document.getElementById('number').value = 'cannot log in';
+                })
+		});
+		
+        function dial() {
+            let number = document.getElementById('number').value;
+            conversationsApi.postConversationsCallParticipants(conversationId, {"participants": [{"address": number}]})
+            .then(() => {
+                conversationsApi.getConversation(conversationId)
+                .then((data) => {
+
+                    let participantId = data.participants.filter(participant => participant.address.includes(number))[0].id;
+                    let callId = data.participants.filter(participant => participant.address.includes(number))[0].calls[0].id;
+                    let d = document.createElement('input');
+                    d.setAttribute('type', 'button');
+                    d.setAttribute('value', 'Disconnect ' + number);
+                    d.setAttribute('onclick', 'disconnect(\'' + conversationId + '\', \'' + participantId + '\', \'' + callId + '\')');
+                    d.setAttribute('id', participantId);
+                    document.getElementById('additionalParties').appendChild(d);
+
+                    d = document.createElement('br');
+                    d.setAttribute('id', 'br_' + participantId);
+                    document.getElementById('additionalParties').appendChild(d);
+                })
+                .catch((err) => {
+                    console.error(err);
+                });
+                document.getElementById('number').value = '';
+            })
+            .catch((err) => {
+                console.error(err)
+            });
+        }
+
+        function disconnect(conversationId, participantId, callId) {
+            conversationsApi.patchConversationsCallParticipantCommunication(conversationId, participantId, callId, {'state': 'disconnected'})
+            .then(() => {
+                document.getElementById('additionalParties').removeChild(document.getElementById(participantId));
+                document.getElementById('additionalParties').removeChild(document.getElementById('br_' + participantId));
+            })
+            .catch((err) => {
+                console.error(err);
+            });
+        }
+
+	</script>
+</head>
+<body>
+	<input id="number" type="text" label="Number to add" />
+    <input type="button" value="Dial" onclick="dial();" />
+
+    <div id="additionalParties">
+    </div>
+</body>
+</html>
